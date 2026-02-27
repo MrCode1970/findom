@@ -1,0 +1,17 @@
+{
+  "transactions": [
+    {
+      "transactionId": "txn-001",
+      "transactionDate": "2026-02-20T10:15:00+02:00",
+      "amount": "120.50",
+      "direction": "debit",
+      "merchant": "Super Market",
+      "comment": "Groceries"
+    },
+    {
+      "transactionDate": "2026-02-21",
+      "amount": "50.00",
+      "direction": "credit"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+[
+  {
+    "date": "2026-02-20",
+    "account_id": "template_card",
+    "currency": "USD",
+    "amount": "10.50",
+    "direction": "debit",
+    "merchant": "Template Coffee",
+    "comment": "Latte"
+  }
+]

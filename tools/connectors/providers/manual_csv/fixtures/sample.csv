@@ -1,0 +1,4 @@
+date,account_id,account_name,currency,amount,direction,merchant,comment,transfer_group
+2026-02-20,card_main,Main Card,USD,10.50,debit,Coffee Shop,Morning coffee,
+2026-02-21,card_main,Main Card,USD,100.00,debit,Transfer to Savings,Move to savings,tr-001
+2026-02-21,savings,Savings Account,USD,100.00,credit,Transfer from Card,From main card,tr-001

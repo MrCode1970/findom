@@ -1,0 +1,10 @@
+{
+  "cards": [
+    {
+      "cardId": "123456",
+      "cardName": "CAL Gold",
+      "last4": "3456",
+      "currency": "ILS"
+    }
+  ]
+}
