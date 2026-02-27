@@ -1,0 +1,44 @@
+Metadata-Version: 2.4
+Name: findom
+Version: 0.1.0
+Summary: Personal finance ledger CAL connector spike
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: playwright>=1.40
+Requires-Dist: requests>=2.31
+
+# findom — CAL connector spike
+
+## Быстрый старт (Linux Mint, Python 3.10+)
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+python -m playwright install chromium
+python -m findom.cal.capture_har
+python -m findom.cal.extract_har --har out/cal.har
+python -m findom.cal.smoke --token-file out/token.txt --bundle-file out/token_bundle.json
+```
+
+## Что делает каждый шаг
+
+- `capture_har`:
+  - открывает Chromium и страницу `https://digital-web.cal-online.co.il/`
+  - пишет сетевой HAR в `out/cal.har`
+  - сохраняет storage state в `out/storage_state.json`
+- `extract_har`:
+  - ищет login endpoint и вытаскивает token в `out/token.txt`
+  - находит пример запроса к transactions endpoint
+  - пишет безопасную сводку в `out/har_summary.json`
+  - пишет локальный bundle для smoke теста в `out/token_bundle.json`
+- `smoke`:
+  - берёт токен и bundle
+  - делает POST к `getCardTransactionsDetails`
+  - пишет ответ в `out/transactions_sample.json`
+
+## Важные замечания
+
+- Не выводите и не коммитьте секреты.
+- Папка `out/` добавлена в `.gitignore`.
+- Если в HAR нет тела ответа (или оно закодировано), `extract_har` попытается декодировать, а при неудаче подскажет причину в консоли.

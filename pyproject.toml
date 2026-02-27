@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "findom"
+version = "0.1.0"
+description = "Personal finance ledger CAL connector spike"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "playwright>=1.40",
+  "requests>=2.31",
+]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["findom*", "cal*", "utils*"]
