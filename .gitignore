@@ -7,3 +7,4 @@ __pycache__/
 .env
 .env.*
 service_key.json
+zenmoney/sms-formats
