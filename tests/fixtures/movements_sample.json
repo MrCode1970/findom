@@ -1,0 +1,73 @@
+[
+  {
+    "date": "2026-02-20T08:15:00+00:00",
+    "account_id": "cal:116163731432020330",
+    "amount": "-120.50",
+    "currency": "ILS",
+    "merchant": "Super Market",
+    "comment": "Groceries",
+    "external_id": "cal:116163731432020330:txn-001",
+    "source": "cal_digital"
+  },
+  {
+    "date": "2026-02-21T10:05:00+00:00",
+    "account_id": "cal:1173646582022261",
+    "amount": "-52.40",
+    "currency": "ILS",
+    "merchant": "Coffee Point",
+    "comment": "Morning coffee",
+    "external_id": "cal:1173646582022261:txn-002",
+    "source": "cal_digital"
+  },
+  {
+    "date": "2026-02-21T17:40:00+00:00",
+    "account_id": "cal:1809016822025293",
+    "amount": "8.00",
+    "currency": "ILS",
+    "merchant": "PP*2197CODE",
+    "comment": "Refund",
+    "external_id": "cal:1809016822025293:30347390426",
+    "source": "cal_digital"
+  },
+  {
+    "date": "2026-02-22T09:30:00+00:00",
+    "account_id": "discount:main",
+    "amount": "-250.00",
+    "currency": "ILS",
+    "merchant": "Electric Company",
+    "comment": "Monthly bill",
+    "external_id": "discount:main:txn-1001",
+    "source": "discount"
+  },
+  {
+    "date": "2026-02-23T12:05:00+00:00",
+    "account_id": "discount:main",
+    "amount": "1200.00",
+    "currency": "ILS",
+    "merchant": "Employer Ltd",
+    "comment": "Salary transfer",
+    "external_id": "discount:main:txn-1002",
+    "source": "discount"
+  },
+  {
+    "date": "2026-02-24T14:20:00+00:00",
+    "account_id": "cal:1173646582022261",
+    "amount": "-79.90",
+    "currency": "ILS",
+    "merchant": "Pharmacy",
+    "comment": "Medicine",
+    "external_id": "cal:1173646582022261:txn-003",
+    "source": "cal_digital"
+  },
+  {
+    "date": "2026-02-25T18:00:00+00:00",
+    "account_id": "cal:116163731432020330",
+    "amount": "-120.50",
+    "currency": "ILS",
+    "merchant": "Supermarket Fresh",
+    "comment": "Groceries adjusted",
+    "external_id": "cal:116163731432020330:txn-001",
+    "source": "cal_digital"
+  }
+]
+
