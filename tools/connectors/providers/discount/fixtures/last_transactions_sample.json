@@ -1,0 +1,34 @@
+{
+  "CurrentAccountLastTransactions": {
+    "CurrentAccountInfo": {
+      "AccountBalance": 3467.82,
+      "AccountCurrencyCode": "ILS"
+    },
+    "OperationEntry": [
+      {
+        "OperationDate": "20260305",
+        "OperationCode": "315",
+        "OperationDescription": "מכבי",
+        "OperationDescription2": "חיוב",
+        "OperationDescriptionToDisplay": "מכבי חיוב",
+        "OperationAmount": -118.55,
+        "OperationNumber": 3002,
+        "Urn": "URN-3002",
+        "EventName": "",
+        "CategoryDescription": ""
+      },
+      {
+        "OperationDate": "20260309",
+        "OperationCode": "317",
+        "OperationDescription": "משכורת",
+        "OperationDescriptionToDisplay": "משכורת",
+        "OperationAmount": 13260.00,
+        "OperationNumber": 3003,
+        "Urn": "URN-3003",
+        "EventName": "",
+        "CategoryDescription": ""
+      }
+    ],
+    "TotalOperation": 2
+  }
+}

@@ -22,6 +22,7 @@ class SheetsClient:
         if not spreadsheet_id.strip():
             raise RuntimeError("spreadsheet_id is required")
         self.spreadsheet_id = spreadsheet_id.strip()
+        self._cached_locale: str | None = None
         credentials_path = require_env("GOOGLE_APPLICATION_CREDENTIALS")
         credentials = service_account.Credentials.from_service_account_file(
             credentials_path,
@@ -42,11 +43,11 @@ class SheetsClient:
         except HttpError as exc:
             raise RuntimeError(f"Failed to get values for range {a1_range}: {exc}") from exc
 
-    def batch_update_values(self, updates: list[dict]) -> None:
+    def batch_update_values(self, updates: list[dict], value_input_option: str = "RAW") -> None:
         if not updates:
             return
         body = {
-            "valueInputOption": "RAW",
+            "valueInputOption": value_input_option,
             "data": updates,
         }
         try:
@@ -96,3 +97,21 @@ class SheetsClient:
         except HttpError as exc:
             raise RuntimeError(f"Failed to fetch spreadsheet metadata: {exc}") from exc
 
+    def get_spreadsheet_locale(self) -> str:
+        if self._cached_locale is not None:
+            return self._cached_locale
+        try:
+            response = (
+                self._service.spreadsheets()
+                .get(
+                    spreadsheetId=self.spreadsheet_id,
+                    fields="properties(locale)",
+                )
+                .execute()
+            )
+        except HttpError as exc:
+            raise RuntimeError(f"Failed to fetch spreadsheet locale: {exc}") from exc
+
+        locale = str(response.get("properties", {}).get("locale", "")).strip()
+        self._cached_locale = locale
+        return locale

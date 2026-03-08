@@ -16,7 +16,8 @@ from tools.connectors.providers.cal_digital import discover_api
 from tools.connectors.providers.cal_digital.fetch import (
     build_session,
     fetch_cards,
-    fetch_transactions,
+    fetch_clearance_requests,
+    fetch_filtered_transactions,
     load_api_hints,
 )
 
@@ -91,6 +92,20 @@ def _compact_hints(api_hints: dict[str, Any]) -> dict[str, Any]:
             "required_headers": api_hints.get("history", {}).get("required_headers", []),
             "pagination_hints": api_hints.get("history", {}).get("pagination_hints", []),
             "date_fields": api_hints.get("history", {}).get("date_fields", []),
+        },
+        "clearance": {
+            "method": api_hints.get("clearance", {}).get("method"),
+            "url_template": api_hints.get("clearance", {}).get("url_template"),
+            "required_headers": api_hints.get("clearance", {}).get("required_headers", []),
+            "pagination_hints": api_hints.get("clearance", {}).get("pagination_hints", []),
+            "date_fields": api_hints.get("clearance", {}).get("date_fields", []),
+        },
+        "filtered_transactions": {
+            "method": api_hints.get("filtered_transactions", {}).get("method"),
+            "url_template": api_hints.get("filtered_transactions", {}).get("url_template"),
+            "required_headers": api_hints.get("filtered_transactions", {}).get("required_headers", []),
+            "pagination_hints": api_hints.get("filtered_transactions", {}).get("pagination_hints", []),
+            "date_fields": api_hints.get("filtered_transactions", {}).get("date_fields", []),
         },
         "dashboard": {
             "method": api_hints.get("dashboard", {}).get("method"),
@@ -200,6 +215,176 @@ def _fetch_cards_with_relogin(
         return relogin_session, relogin_hints, cards_payload
 
 
+def _fetch_filtered_with_relogin(
+    session: requests.Session,
+    api_hints: dict[str, Any],
+    state: dict[str, Any],
+    state_update: dict[str, Any],
+    *,
+    from_date: str,
+    to_date: str,
+    init_payload: Any,
+) -> tuple[requests.Session, dict[str, Any], list[dict[str, Any]]]:
+    try:
+        filtered = retry_call(
+            lambda: fetch_filtered_transactions(
+                session,
+                api_hints,
+                card_id=None,
+                from_date=from_date,
+                to_date=to_date,
+                init_payload=init_payload,
+            ),
+            exceptions=(TemporaryError, RateLimitError),
+        )
+        return session, api_hints, filtered
+    except InvalidCredentialsError:
+        session.close()
+        merged_state = dict(state)
+        merged_state.update(state_update)
+        relogin_session, relogin_hints, relogin_state = ensure_session(merged_state)
+        state_update.update(relogin_state)
+        filtered = retry_call(
+            lambda: fetch_filtered_transactions(
+                relogin_session,
+                relogin_hints,
+                card_id=None,
+                from_date=from_date,
+                to_date=to_date,
+                init_payload=init_payload,
+            ),
+            exceptions=(TemporaryError, RateLimitError),
+        )
+        return relogin_session, relogin_hints, filtered
+
+
+def _fetch_clearance_with_relogin(
+    session: requests.Session,
+    api_hints: dict[str, Any],
+    state: dict[str, Any],
+    state_update: dict[str, Any],
+    *,
+    from_date: str,
+    to_date: str,
+    init_payload: Any,
+) -> tuple[requests.Session, dict[str, Any], list[dict[str, Any]]]:
+    try:
+        clearance = retry_call(
+            lambda: fetch_clearance_requests(
+                session,
+                api_hints,
+                card_id=None,
+                from_date=from_date,
+                to_date=to_date,
+                init_payload=init_payload,
+            ),
+            exceptions=(TemporaryError, RateLimitError),
+        )
+        return session, api_hints, clearance
+    except InvalidCredentialsError:
+        session.close()
+        merged_state = dict(state)
+        merged_state.update(state_update)
+        relogin_session, relogin_hints, relogin_state = ensure_session(merged_state)
+        state_update.update(relogin_state)
+        clearance = retry_call(
+            lambda: fetch_clearance_requests(
+                relogin_session,
+                relogin_hints,
+                card_id=None,
+                from_date=from_date,
+                to_date=to_date,
+                init_payload=init_payload,
+            ),
+            exceptions=(TemporaryError, RateLimitError),
+        )
+        return relogin_session, relogin_hints, clearance
+
+
+def _first_text_value(txn: dict[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = txn.get(key)
+        if value is None:
+            continue
+        text = str(value).strip()
+        if text:
+            return text
+    return ""
+
+
+def _transaction_dedupe_key(card_id: str, txn: dict[str, Any]) -> str:
+    transaction_id = _first_text_value(
+        txn,
+        ("trnIntId", "transactionId", "txnId", "operationId", "id"),
+    )
+    txn_card_id = _first_text_value(
+        txn,
+        ("cardUniqueID", "cardUniqueId", "cardId", "card_id"),
+    )
+    effective_card = txn_card_id or card_id or "unknown"
+    if transaction_id:
+        return f"id:{effective_card}:{transaction_id}"
+
+    occurred_at = _first_text_value(
+        txn,
+        ("trnPurchaseDate", "debCrdDate", "transactionDate", "date", "eventDate", "createdAt"),
+    )
+    amount = _first_text_value(
+        txn,
+        ("trnAmt", "amount", "debitAmount", "creditAmount", "transactionAmount"),
+    )
+    merchant = _first_text_value(
+        txn,
+        ("merchantName", "merchant", "businessName", "storeName", "description"),
+    )
+    return f"fallback:{effective_card}:{occurred_at}:{amount}:{merchant}"
+
+
+def _merge_history_transactions(
+    *,
+    card_id: str,
+    clearance_items: list[dict[str, Any]],
+    filtered_items: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, int]]:
+    merged: list[dict[str, Any]] = []
+    seen_keys: set[str] = set()
+
+    for source_endpoint, items in (
+        ("clearance", clearance_items),
+        ("filtered", filtered_items),
+    ):
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            decorated = dict(item)
+            decorated["source_endpoint"] = source_endpoint
+            dedupe_key = _transaction_dedupe_key(card_id, decorated)
+            if dedupe_key in seen_keys:
+                continue
+            seen_keys.add(dedupe_key)
+            merged.append(decorated)
+
+    return merged, {
+        "clearance_raw": len(clearance_items),
+        "filtered_raw": len(filtered_items),
+        "merged_unique": len(merged),
+    }
+
+
+def _extract_txn_card_id(txn: dict[str, Any]) -> str:
+    return _first_text_value(txn, ("cardUniqueID", "cardUniqueId", "cardId", "card_id")) or "unknown"
+
+
+def _group_transactions_by_card(transactions: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]]:
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for txn in transactions:
+        if not isinstance(txn, dict):
+            continue
+        card_key = _extract_txn_card_id(txn)
+        grouped.setdefault(card_key, []).append(txn)
+    return grouped
+
+
 def sync(window: SyncWindow, state: dict[str, Any]) -> dict[str, Any]:
     session, api_hints, state_update = ensure_session(state)
     from_date = _effective_from_date(window, state)
@@ -220,51 +405,76 @@ def sync(window: SyncWindow, state: dict[str, Any]) -> dict[str, Any]:
             if card_id and card_id not in card_ids:
                 card_ids.append(card_id)
 
+        session, api_hints, filtered_all = _fetch_filtered_with_relogin(
+            session,
+            api_hints,
+            state,
+            state_update,
+            from_date=from_date,
+            to_date=to_date,
+            init_payload=cards_payload,
+        )
+        filtered_by_card = _group_transactions_by_card(filtered_all)
+
+        session, api_hints, clearance_all = _fetch_clearance_with_relogin(
+            session,
+            api_hints,
+            state,
+            state_update,
+            from_date=from_date,
+            to_date=to_date,
+            init_payload=cards_payload,
+        )
+        clearance_by_card = _group_transactions_by_card(clearance_all)
+
         txns_by_card: dict[str, list[dict[str, Any]]] = {}
+        history_diagnostics: dict[str, dict[str, int]] = {}
         if not card_ids:
             card_ids = [""]
-        for card_id in card_ids:
-            try:
-                transactions = retry_call(
-                    lambda cid=card_id: fetch_transactions(
-                        session,
-                        api_hints,
-                        card_id=cid or None,
-                        from_date=from_date,
-                        to_date=to_date,
-                        init_payload=cards_payload,
-                    ),
-                    exceptions=(TemporaryError, RateLimitError),
-                )
-            except InvalidCredentialsError:
-                session.close()
-                merged_state = dict(state)
-                merged_state.update(state_update)
-                session, api_hints, relogin_state = ensure_session(merged_state)
-                state_update.update(relogin_state)
-                try:
-                    transactions = retry_call(
-                        lambda cid=card_id: fetch_transactions(
-                            session,
-                            api_hints,
-                            card_id=cid or None,
-                            from_date=from_date,
-                            to_date=to_date,
-                            init_payload=cards_payload,
-                        ),
-                        exceptions=(TemporaryError, RateLimitError),
-                    )
-                except InvalidCredentialsError as exc:
-                    raise InvalidCredentialsError(
-                        "CAL API returned 401/403 even after relogin"
-                    ) from exc
-            txns_by_card[card_id or "unknown"] = transactions
+        loop_card_ids = list(card_ids)
+        for extra_card in filtered_by_card.keys():
+            if extra_card and extra_card not in loop_card_ids:
+                loop_card_ids.append(extra_card)
+        for extra_card in clearance_by_card.keys():
+            if extra_card and extra_card not in loop_card_ids:
+                loop_card_ids.append(extra_card)
+
+        for card_id in loop_card_ids:
+            card_key = card_id or "unknown"
+            clearance_transactions = clearance_by_card.get(card_key, [])
+            filtered_transactions = filtered_by_card.get(card_key, [])
+            merged_transactions, card_stats = _merge_history_transactions(
+                card_id=card_id,
+                clearance_items=clearance_transactions,
+                filtered_items=filtered_transactions,
+            )
+            txns_by_card[card_key] = merged_transactions
+            history_diagnostics[card_key] = card_stats
+            LOG.info(
+                "CAL card %s history merge: clearance=%s filtered=%s merged=%s",
+                card_key,
+                card_stats["clearance_raw"],
+                card_stats["filtered_raw"],
+                card_stats["merged_unique"],
+            )
 
         state_update["last_sync"] = window.to_date.isoformat()
+
+        total_clearance_raw = sum(item["clearance_raw"] for item in history_diagnostics.values())
+        total_filtered_raw = sum(item["filtered_raw"] for item in history_diagnostics.values())
+        total_merged_unique = sum(item["merged_unique"] for item in history_diagnostics.values())
 
         return {
             "cards": cards_payload,
             "txns_by_card": txns_by_card,
+            "history_diagnostics": {
+                "per_card": history_diagnostics,
+                "totals": {
+                    "clearance_raw": total_clearance_raw,
+                    "filtered_raw": total_filtered_raw,
+                    "merged_unique": total_merged_unique,
+                },
+            },
             "_state_update": state_update,
         }
     finally:

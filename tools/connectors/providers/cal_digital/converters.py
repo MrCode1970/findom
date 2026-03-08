@@ -14,6 +14,10 @@ from tools.connectors._core.types import Account, ConnectorResult, Movement
 
 PROVIDER_NAME = "cal_digital"
 DEFAULT_CURRENCY = "ILS"
+CAL_NUMERIC_CURRENCY_MAP = {
+    "3": "ILS",
+    "376": "ILS",
+}
 
 
 def _normalize_key(name: str) -> str:
@@ -76,11 +80,36 @@ def _extract_card_title(card: dict[str, Any], card_id: str) -> str:
     return f"CAL card {card_id}"
 
 
+def _normalize_currency_value(value: Any) -> str | None:
+    text = str(value).strip().upper()
+    if not text:
+        return None
+    if text in CAL_NUMERIC_CURRENCY_MAP:
+        return CAL_NUMERIC_CURRENCY_MAP[text]
+    if len(text) == 3 and text.isalpha():
+        return text
+    return None
+
+
 def _extract_currency(source: dict[str, Any] | None = None) -> str:
-    if source:
-        currency = _find_first(source, ("currency", "currencyCode", "ccy"))
-        if currency is not None and str(currency).strip():
-            return str(currency).upper()
+    if not source:
+        return DEFAULT_CURRENCY
+
+    for key in (
+        "currency",
+        "ccy",
+        "trnCurrencyIsoCode",
+        "srcCurrencyCode",
+        "currencyCode",
+        "crmIccCurrencyDesc",
+    ):
+        value = source.get(key)
+        if value in (None, ""):
+            continue
+        normalized = _normalize_currency_value(value)
+        if normalized:
+            return normalized
+
     return DEFAULT_CURRENCY
 
 
@@ -349,12 +378,18 @@ def _build_external_id(
     return hashlib.sha1(raw_key.encode("utf-8")).hexdigest()
 
 
-def convert(raw_bundle: dict[str, Any]) -> ConnectorResult:
+def convert_with_diagnostics(raw_bundle: dict[str, Any]) -> tuple[ConnectorResult, dict[str, Any]]:
     cards_payload = raw_bundle.get("cards")
     txns_by_card_raw = raw_bundle.get("txns_by_card", {})
 
     accounts: list[Account] = []
     movements: list[Movement] = []
+    skip_reasons: dict[str, int] = {
+        "non_object_txn": 0,
+        "duplicate_external_id": 0,
+    }
+    raw_transactions_by_card: dict[str, int] = {}
+    converted_by_card: dict[str, int] = {}
 
     cards = _collect_cards(cards_payload)
     account_ids_seen: set[str] = set()
@@ -410,8 +445,12 @@ def convert(raw_bundle: dict[str, Any]) -> ConnectorResult:
             account_ids_seen.add(account_id)
 
         transactions = _collect_transactions(card_tx_payload)
+        card_key = card_id or "unknown"
+        raw_transactions_by_card[card_key] = len(transactions)
+        converted_before = len(movements)
         for txn in transactions:
             if not isinstance(txn, dict):
+                skip_reasons["non_object_txn"] += 1
                 continue
 
             merchant = _extract_merchant(txn)
@@ -429,6 +468,7 @@ def convert(raw_bundle: dict[str, Any]) -> ConnectorResult:
             )
 
             if external_id in seen_movement_ids:
+                skip_reasons["duplicate_external_id"] += 1
                 continue
             seen_movement_ids.add(external_id)
 
@@ -449,5 +489,22 @@ def convert(raw_bundle: dict[str, Any]) -> ConnectorResult:
                     },
                 )
             )
+        converted_by_card[card_key] = len(movements) - converted_before
 
-    return ConnectorResult(accounts=accounts, movements=movements)
+    total_raw_transactions = sum(raw_transactions_by_card.values())
+    converted_movements = len(movements)
+    skipped_in_converter = max(0, total_raw_transactions - converted_movements)
+    diagnostics = {
+        "raw_transactions_total": total_raw_transactions,
+        "raw_transactions_by_card": raw_transactions_by_card,
+        "converted_movements": converted_movements,
+        "converted_by_card": converted_by_card,
+        "skipped_in_converter": skipped_in_converter,
+        "skip_reasons": {key: value for key, value in skip_reasons.items() if value > 0},
+    }
+    return ConnectorResult(accounts=accounts, movements=movements), diagnostics
+
+
+def convert(raw_bundle: dict[str, Any]) -> ConnectorResult:
+    result, _diagnostics = convert_with_diagnostics(raw_bundle)
+    return result

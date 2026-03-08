@@ -6,10 +6,10 @@
   - schema models (`ColumnSpec`, `SheetSchema`, `SpreadsheetSchema`),
   - sheet ops (`ensure_sheet`, `apply_sheet_schema`),
   - snapshot upsert (`load_key_index`, `upsert_rows_snapshot`).
-- Лог-схема задана в [tables/log_schema.py](/home/vitaliy/mr1970code/findom/tables/log_schema.py):
+- Лог-схема задана в [tables/schemas/log_schema.py](/home/vitaliy/mr1970code/findom/tables/schemas/log_schema.py):
   - `Journal` (A:I),
   - `_Meta` (A:B).
-- Таблица лога создается скриптом [scripts/create_log_table.py](/home/vitaliy/mr1970code/findom/scripts/create_log_table.py).
+- Таблица лога создается скриптом [scripts/create_spreadsheet.py](/home/vitaliy/mr1970code/findom/scripts/create_spreadsheet.py).
 - Writer лога реализован в [scripts/sync_log_to_sheet.py](/home/vitaliy/mr1970code/findom/scripts/sync_log_to_sheet.py):
   - `write_log_snapshot(spreadsheet_id, movements, synced_at_iso)`.
 - Оркестратор источников и запуска:
@@ -28,7 +28,9 @@
   - `cal_digital` запускается через фактические модули:
     - `tools.connectors.providers.cal_digital.api`
     - `tools.connectors.providers.cal_digital.converters`
-  - `discount` пока `NotImplementedError`.
+  - `discount` запускается через фактические модули:
+    - `tools.connectors.providers.discount.api`
+    - `tools.connectors.providers.discount.converters`
   - добавлен слой нормализации движений для лог-витрины (см. "Hardening").
 - `scripts/sync_log_to_sheet.py`:
   - преобразует movement dict -> `Journal!A:I`,
@@ -110,7 +112,7 @@
 ## Команды диагностики
 - Создать/применить структуру таблицы:
 ```bash
-python scripts/create_log_table.py
+python scripts/create_spreadsheet.py --schema tables/schemas/log_schema.py
 ```
 
 - Fixture sync (диагностический writer):
@@ -147,3 +149,59 @@ python scripts/run_sync.py --source cal_digital --write-log
   - необходимость paging или дополнительных флагов в `filteredTransactions`.
 - Для старта допустим ручной режим фиксации рабочего запроса из `network_log.jsonl`, затем стабилизация в коде.
 
+## 2026-03-08 — Discount + CAL progress update
+
+- `discount` connector подтвержден в runtime:
+  - `tools/connectors/run_sync.py --provider discount` успешно выполняется при наличии `DISCOUNT_*` env.
+  - auto-relogin/discovery создает:
+    - `.state/discount/api_discovery/storage_state.json`
+    - `.state/discount/api_discovery/diagnostics.json`
+- Для `discount` зафиксирован рабочий history endpoint:
+  - `GET /Titan/gatewayAPI/lastTransactions/transactions/{account}/ByDate`
+  - параметры диапазона: `FromDate`, `ToDate` (`YYYYMMDD`)
+  - шаблон сохранен в:
+    - `.state/discount/research/20260308_161147/saved_requests/last_transactions_by_date.template.json`
+- Дополнительно проверены диапазоны (one-off window runs) и получены стабильные выборки:
+  - `2026-03-01..2026-03-08`
+  - `2026-02-01..2026-02-28`
+  - `2025-12-01..2025-12-31`
+
+- Проведено повторное исследование `cal_digital` в live-режиме:
+  - подтвержден основной history endpoint:
+    - `POST /Transactions/api/filteredTransactions/getFilteredTransactions`
+  - подтвержден дополнительный источник транзакций:
+    - `POST /Transactions/api/approvals/getClearanceRequests`
+  - итоговый набор формируется merge `filtered + clearance` с дедупликацией.
+- На контрольном диапазоне `2026-03-01..2026-03-08`:
+  - `filtered_raw=23`
+  - `clearance_raw=5`
+  - `merged_unique=28`
+- Для CAL сохранен безопасный request-template:
+  - `.state/cal_digital/api_discovery/saved_requests/filtered_transactions.template.json`
+
+- Наблюдение по профилям запроса CAL:
+  - `caller=module_search` + `trnType=0` дает полный history-профиль для диапазонов.
+  - `caller=dashboard` + `trnType=6` дает ограниченный dashboard-набор и не должен использоваться как основной history режим.
+
+## 2026-03-05 — Stage 2: schema-driven showcase `showcase_ledger_first`
+
+- Добавлен первый реальный JSON-вариант витрины: `tables/schemas/showcase_ledger_first.json`.
+- Вариант создает листы:
+  - `Dashboard` (агрегаты `total_income`, `total_expense`, `net`, `operations_count`),
+  - `Normalized` (10 колонок, формулы `month`/`direction`, фильтр, freeze header),
+  - `Categories` (демо-справочник категорий).
+- В `Normalized` добавлен demo dataset (10 строк):
+  - 2 дохода,
+  - 6 расходов,
+  - 1 refund,
+  - 1 transfer-подобная операция,
+  - уникальные `external_id`.
+- Dry-run нового showcase проходит:
+  - `python scripts/create_spreadsheet.py --schema tables/schemas/showcase_ledger_first.json --dry-run`
+- Live smoke test запущен, но в текущем окружении не завершен:
+  - отсутствуют установленные зависимости Google Sheets SDK (`google-api-python-client`, `google-auth`),
+  - установка через `pip` не удалась из-за сетевого ограничения proxy (403),
+  - поэтому реальный апдейт таблицы в этом окружении пока недоступен.
+- Ограничения текущего этапа:
+  - проверка результата в реальной Google Sheet требует доступных зависимостей и сервисных credentials,
+  - conditional formatting для showcase не добавлялся (фокус на стабильный минимум).

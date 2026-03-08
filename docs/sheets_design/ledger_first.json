@@ -1,0 +1,195 @@
+{
+  "variant": "ledger_first",
+  "version": 1,
+  "principle": "Normalized ledger is the source for all reporting sheets",
+  "sheets": [
+    {
+      "name": "Transactions",
+      "role": "raw_staging",
+      "columns": [
+        "raw_external_id",
+        "raw_date",
+        "raw_amount",
+        "raw_currency",
+        "raw_account",
+        "raw_category_hint",
+        "raw_description",
+        "ingested_at"
+      ],
+      "range": "A1:H",
+      "notes": "Optional diagnostics layer for raw payload tracking"
+    },
+    {
+      "name": "Normalized",
+      "role": "source_of_truth_for_showcase",
+      "columns": [
+        "external_id",
+        "date",
+        "amount",
+        "currency",
+        "account",
+        "category",
+        "description",
+        "month",
+        "direction",
+        "is_refund",
+        "abs_amount",
+        "category_group",
+        "notes_auto"
+      ],
+      "range": "A1:M",
+      "formulas": {
+        "month": "=IF(B2=\"\",,DATE(YEAR(B2),MONTH(B2),1))",
+        "direction": "=IF(C2=\"\",,IF(C2<0,\"expense\",\"income\"))",
+        "is_refund": "=IF(A2=\"\",,REGEXMATCH(LOWER(G2),\"refund|возврат|reversal\"))",
+        "abs_amount": "=IF(C2=\"\",,ABS(C2))",
+        "category_group": "=IF(F2=\"\",,IFNA(VLOOKUP(F2,Categories!A:B,2,FALSE),\"unmapped\"))",
+        "notes_auto": "=IF(A2=\"\",,IF(COUNTIF($A:$A,A2)>1,\"duplicate_external_id\",IF(L2=\"unmapped\",\"category_missing\",\"ok\")))"
+      },
+      "validation": {
+        "currency": [
+          "ILS",
+          "USD",
+          "EUR"
+        ],
+        "category": "Categories!A:A"
+      }
+    },
+    {
+      "name": "Categories",
+      "role": "dictionary",
+      "columns": [
+        "category",
+        "category_group",
+        "budget_type",
+        "is_active"
+      ],
+      "range": "A1:D",
+      "rows": [
+        ["groceries", "living", "variable", true],
+        ["transport", "mobility", "variable", true],
+        ["dining", "lifestyle", "variable", true],
+        ["subscriptions", "digital", "fixed", true],
+        ["utilities", "housing", "fixed", true],
+        ["healthcare", "health", "variable", true],
+        ["salary", "income", "fixed", true],
+        ["transfer", "balance", "fixed", true],
+        ["cashback", "income", "variable", true],
+        ["refund", "income", "variable", true],
+        ["shopping", "lifestyle", "variable", true],
+        ["travel", "mobility", "variable", true],
+        ["entertainment", "lifestyle", "variable", true],
+        ["fees", "banking", "fixed", true]
+      ]
+    },
+    {
+      "name": "Dashboard",
+      "role": "summary",
+      "blocks": [
+        "monthly_pnl",
+        "top_expense_categories",
+        "refund_impact",
+        "data_quality"
+      ],
+      "formulas": {
+        "income_by_month": "=SUMIFS(Normalized!C:C,Normalized!H:H,$A2,Normalized!C:C,\">0\")",
+        "expense_by_month": "=SUMIFS(Normalized!C:C,Normalized!H:H,$A2,Normalized!C:C,\"<0\")",
+        "net_by_month": "=B2+C2",
+        "refund_total": "=SUMIFS(Normalized!C:C,Normalized!J:J,TRUE)",
+        "refund_count": "=COUNTIFS(Normalized!J:J,TRUE)",
+        "duplicates": "=COUNTIF(Normalized!M:M,\"duplicate_external_id\")",
+        "unmapped_categories": "=COUNTIF(Normalized!M:M,\"category_missing\")"
+      }
+    }
+  ],
+  "formatting_rules": [
+    {
+      "sheet": "Normalized",
+      "target_range": "A2:M",
+      "type": "custom_formula",
+      "formula": "=COUNTIF($A:$A,$A1)>1",
+      "style": "red_fill",
+      "purpose": "highlight_duplicate_external_id"
+    },
+    {
+      "sheet": "Normalized",
+      "target_range": "C2:C",
+      "type": "number_condition",
+      "condition": "<0",
+      "style": "red_text",
+      "purpose": "expense_color"
+    },
+    {
+      "sheet": "Normalized",
+      "target_range": "C2:C",
+      "type": "number_condition",
+      "condition": ">0",
+      "style": "green_text",
+      "purpose": "income_color"
+    },
+    {
+      "sheet": "Normalized",
+      "target_range": "A2:M",
+      "type": "custom_formula",
+      "formula": "=$J2=TRUE",
+      "style": "yellow_fill",
+      "purpose": "highlight_refunds"
+    },
+    {
+      "sheet": "Normalized",
+      "target_range": "M2:M",
+      "type": "text_not_equal",
+      "condition": "ok",
+      "style": "orange_fill",
+      "purpose": "quality_issues"
+    }
+  ],
+  "demo_dataset": {
+    "sheet": "Normalized",
+    "source_columns": [
+      "external_id",
+      "date",
+      "amount",
+      "currency",
+      "account",
+      "category",
+      "description"
+    ],
+    "rows": [
+      ["cal-2026-01-0001", "2026-01-03", -210.45, "ILS", "cal_visa_main", "groceries", "supermarket shufersal"],
+      ["cal-2026-01-0002", "2026-01-03", -34.90, "ILS", "cal_visa_main", "transport", "bus rav-kav reload"],
+      ["cal-2026-01-0003", "2026-01-04", -58.00, "ILS", "cal_visa_main", "dining", "coffee with team"],
+      ["cal-2026-01-0004", "2026-01-05", -420.00, "ILS", "cal_visa_main", "utilities", "electricity bill"],
+      ["cal-2026-01-0005", "2026-01-05", 12500.00, "ILS", "cal_visa_main", "salary", "salary january"],
+      ["cal-2026-01-0006", "2026-01-06", -49.90, "ILS", "cal_visa_main", "subscriptions", "spotify annual"],
+      ["cal-2026-01-0007", "2026-01-06", -89.00, "ILS", "cal_visa_main", "healthcare", "pharmacy purchase"],
+      ["cal-2026-01-0008", "2026-01-07", -312.00, "ILS", "cal_visa_main", "shopping", "clothing store"],
+      ["cal-2026-01-0009", "2026-01-08", -120.00, "ILS", "cal_visa_main", "entertainment", "cinema tickets"],
+      ["cal-2026-01-0010", "2026-01-09", -67.20, "ILS", "cal_visa_main", "dining", "lunch order"],
+      ["cal-2026-01-0011", "2026-01-09", -29.90, "ILS", "cal_visa_main", "subscriptions", "cloud storage"],
+      ["cal-2026-01-0012", "2026-01-10", -15.00, "ILS", "cal_visa_main", "fees", "card monthly fee"],
+      ["cal-2026-01-0013", "2026-01-11", -540.00, "ILS", "cal_visa_main", "travel", "train to haifa"],
+      ["cal-2026-01-0014", "2026-01-12", -180.00, "ILS", "cal_visa_main", "groceries", "weekend market"],
+      ["cal-2026-01-0015", "2026-01-12", 35.00, "ILS", "cal_visa_main", "cashback", "cashback campaign"],
+      ["cal-2026-01-0016", "2026-01-13", -96.50, "ILS", "cal_visa_main", "transport", "fuel station"],
+      ["cal-2026-01-0017", "2026-01-14", -245.00, "ILS", "cal_visa_main", "shopping", "electronics accessory"],
+      ["cal-2026-01-0018", "2026-01-14", 245.00, "ILS", "cal_visa_main", "refund", "refund electronics accessory"],
+      ["cal-2026-01-0019", "2026-01-15", -72.00, "ILS", "cal_visa_main", "dining", "dinner takeaway"],
+      ["cal-2026-01-0020", "2026-01-16", -410.00, "ILS", "cal_visa_main", "utilities", "water and city tax"],
+      ["cal-2026-01-0021", "2026-01-17", -230.00, "ILS", "cal_visa_main", "groceries", "supermarket mega"],
+      ["cal-2026-01-0022", "2026-01-18", -1500.00, "ILS", "cal_visa_main", "transfer", "transfer to savings"],
+      ["cal-2026-01-0023", "2026-01-19", -84.30, "ILS", "cal_visa_main", "transport", "taxi app"],
+      ["cal-2026-01-0024", "2026-01-20", -93.00, "ILS", "cal_visa_main", "healthcare", "dentist visit"],
+      ["cal-2026-01-0025", "2026-01-21", -199.00, "ILS", "cal_visa_main", "shopping", "home supplies"],
+      ["cal-2026-01-0026", "2026-01-22", -76.00, "ILS", "cal_visa_main", "entertainment", "streaming rental"],
+      ["cal-2026-01-0027", "2026-01-23", -132.00, "ILS", "cal_visa_main", "groceries", "fresh produce"],
+      ["cal-2026-01-0028", "2026-01-24", -58.50, "ILS", "cal_visa_main", "dining", "lunch cafe"],
+      ["cal-2026-01-0029", "2026-01-25", -112.40, "ILS", "cal_visa_main", "transport", "intercity bus"],
+      ["cal-2026-01-0030", "2026-01-26", -340.00, "ILS", "cal_visa_main", "travel", "hotel booking partial"],
+      ["cal-2026-01-0031", "2026-01-27", 120.00, "ILS", "cal_visa_main", "refund", "refund hotel overcharge"],
+      ["cal-2026-01-0032", "2026-01-28", -260.00, "ILS", "cal_visa_main", "utilities", "internet provider"],
+      ["cal-2026-01-0033", "2026-01-29", -145.60, "ILS", "cal_visa_main", "groceries", "late month grocery"],
+      ["cal-2026-01-0034", "2026-01-30", -63.00, "ILS", "cal_visa_main", "dining", "office lunch"]
+    ]
+  }
+}

@@ -1,0 +1,341 @@
+{
+  "name": "showcase_ledger_first",
+  "version": 1,
+  "sheets": [
+    {
+      "title": "Dashboard",
+      "columns": [
+        {
+          "key": "metric",
+          "header": "metric",
+          "width": 220
+        },
+        {
+          "key": "value",
+          "header": "value",
+          "width": 180
+        }
+      ],
+      "freeze_rows": 1,
+      "filter": false,
+      "min_rows": 50,
+      "min_cols": 8,
+      "clear": true,
+      "demo_rows": [
+        [
+          "total_income",
+          ""
+        ],
+        [
+          "total_expense",
+          ""
+        ],
+        [
+          "net",
+          ""
+        ],
+        [
+          "operations_count",
+          ""
+        ]
+      ],
+      "formulas": [
+        {
+          "mode": "cell",
+          "cell": "B2",
+          "formula": "=СУММЕСЛИМН(Normalized!G2:G;Normalized!I2:I;\"income\")"
+        },
+        {
+          "mode": "cell",
+          "cell": "B3",
+          "formula": "=СУММЕСЛИМН(Normalized!G2:G;Normalized!I2:I;\"expense\")"
+        },
+        {
+          "mode": "cell",
+          "cell": "B4",
+          "formula": "=B2+B3"
+        },
+        {
+          "mode": "cell",
+          "cell": "B5",
+          "formula": "=СЧЁТЗ(Normalized!J2:J)"
+        }
+      ],
+      "number_formats": [
+        {
+          "range": "B2:B4",
+          "type": "NUMBER",
+          "pattern": "#,##0.00"
+        }
+      ]
+    },
+    {
+      "title": "Normalized",
+      "columns": [
+        {
+          "key": "date",
+          "header": "date",
+          "width": 120
+        },
+        {
+          "key": "month",
+          "header": "month",
+          "width": 100
+        },
+        {
+          "key": "source",
+          "header": "source",
+          "width": 130
+        },
+        {
+          "key": "account_id",
+          "header": "account_id",
+          "width": 180
+        },
+        {
+          "key": "category",
+          "header": "category",
+          "width": 130
+        },
+        {
+          "key": "description",
+          "header": "description",
+          "width": 260
+        },
+        {
+          "key": "amount",
+          "header": "amount",
+          "width": 120
+        },
+        {
+          "key": "currency",
+          "header": "currency",
+          "width": 90
+        },
+        {
+          "key": "direction",
+          "header": "direction",
+          "width": 110
+        },
+        {
+          "key": "external_id",
+          "header": "external_id",
+          "width": 230
+        }
+      ],
+      "freeze_rows": 1,
+      "filter": true,
+      "min_rows": 1000,
+      "min_cols": 12,
+      "clear": true,
+      "demo_rows": [
+        [
+          "2026-02-01",
+          "",
+          "cal_digital",
+          "card_main",
+          "Salary",
+          "Monthly salary payout",
+          14500.00,
+          "ILS",
+          "",
+          "cal_2026_0001"
+        ],
+        [
+          "2026-02-02",
+          "",
+          "cal_digital",
+          "card_main",
+          "Food",
+          "Supermarket weekly shopping",
+          -420.50,
+          "ILS",
+          "",
+          "cal_2026_0002"
+        ],
+        [
+          "2026-02-03",
+          "",
+          "cal_digital",
+          "card_main",
+          "Transport",
+          "Fuel station payment",
+          -310.00,
+          "ILS",
+          "",
+          "cal_2026_0003"
+        ],
+        [
+          "2026-02-04",
+          "",
+          "cal_digital",
+          "card_main",
+          "Home",
+          "Internet provider invoice",
+          -129.90,
+          "ILS",
+          "",
+          "cal_2026_0004"
+        ],
+        [
+          "2026-02-05",
+          "",
+          "cal_digital",
+          "card_main",
+          "Health",
+          "Pharmacy purchase",
+          -87.30,
+          "ILS",
+          "",
+          "cal_2026_0005"
+        ],
+        [
+          "2026-02-06",
+          "",
+          "cal_digital",
+          "card_main",
+          "Food",
+          "Coffee with colleagues",
+          -38.00,
+          "ILS",
+          "",
+          "cal_2026_0006"
+        ],
+        [
+          "2026-02-07",
+          "",
+          "cal_digital",
+          "card_main",
+          "Transport",
+          "Taxi ride",
+          -74.20,
+          "ILS",
+          "",
+          "cal_2026_0007"
+        ],
+        [
+          "2026-02-08",
+          "",
+          "cal_digital",
+          "card_main",
+          "Health",
+          "Refund for returned medicine",
+          87.30,
+          "ILS",
+          "",
+          "cal_2026_0008"
+        ],
+        [
+          "2026-02-09",
+          "",
+          "cal_digital",
+          "card_main",
+          "Transfer",
+          "Transfer to savings account",
+          -500.00,
+          "ILS",
+          "",
+          "cal_2026_0009"
+        ],
+        [
+          "2026-02-10",
+          "",
+          "cal_digital",
+          "card_main",
+          "Salary",
+          "Performance bonus",
+          2500.00,
+          "ILS",
+          "",
+          "cal_2026_0010"
+        ]
+      ],
+      "formulas": [
+        {
+          "mode": "cell",
+          "cell": "B2",
+          "formula": "=ТЕКСТ(A2;\"yyyy-mm\")"
+        },
+        {
+          "mode": "autofill",
+          "source_range": "B2",
+          "destination_range": "B2:B1000",
+          "dimension": "ROWS"
+        },
+        {
+          "mode": "cell",
+          "cell": "I2",
+          "formula": "=ЕСЛИ(G2>=0;\"income\";\"expense\")"
+        },
+        {
+          "mode": "autofill",
+          "source_range": "I2",
+          "destination_range": "I2:I1000",
+          "dimension": "ROWS"
+        }
+      ],
+      "number_formats": [
+        {
+          "range": "A2:A1000",
+          "type": "DATE",
+          "pattern": "yyyy-mm-dd"
+        },
+        {
+          "range": "G2:G1000",
+          "type": "NUMBER",
+          "pattern": "#,##0.00"
+        }
+      ]
+    },
+    {
+      "title": "Categories",
+      "columns": [
+        {
+          "key": "category",
+          "header": "category",
+          "width": 180
+        },
+        {
+          "key": "group",
+          "header": "group",
+          "width": 180
+        }
+      ],
+      "freeze_rows": 1,
+      "filter": true,
+      "min_rows": 200,
+      "min_cols": 6,
+      "clear": true,
+      "demo_rows": [
+        [
+          "Food",
+          "Expense"
+        ],
+        [
+          "Transport",
+          "Expense"
+        ],
+        [
+          "Home",
+          "Expense"
+        ],
+        [
+          "Health",
+          "Expense"
+        ],
+        [
+          "Salary",
+          "Income"
+        ],
+        [
+          "Transfer",
+          "Transfer"
+        ],
+        [
+          "Other",
+          "Expense"
+        ]
+      ]
+    }
+  ]
+}

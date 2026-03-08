@@ -4,6 +4,8 @@ import copy
 import json
 import logging
 import re
+from datetime import date as date_cls
+from datetime import datetime, time, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlsplit, urlunsplit
@@ -19,8 +21,9 @@ DEFAULT_USER_AGENT = "findom-cal-digital/1.0 (+requests)"
 DEFAULT_TIMEOUT = 30
 MAX_PAGES = 50
 INIT_PATH = "/authentication/api/account/init"
-HISTORY_PATH = "/transactions/api/filteredtransactions/getfilteredtransactions"
 DASHBOARD_PATH = "/transactions/api/lasttransactionsfordashboard/lasttransactionsfordashboard"
+CLEARANCE_PATH = "/transactions/api/approvals/getclearancerequests"
+FILTERED_TRANSACTIONS_PATH = "/transactions/api/filteredtransactions/getfilteredtransactions"
 
 
 def _normalize_key(name: str) -> str:
@@ -112,13 +115,14 @@ def _iter_report_endpoints(report: dict[str, Any]) -> list[dict[str, Any]]:
 def _select_endpoint(
     report: dict[str, Any],
     *,
-    endpoint_type: str,
+    endpoint_type: str | None,
     path_contains: str,
 ) -> dict[str, Any] | None:
     candidates = _iter_report_endpoints(report)
-    typed = [item for item in candidates if item.get("endpoint_type") == endpoint_type]
-    if typed:
-        candidates = typed
+    if endpoint_type:
+        typed = [item for item in candidates if item.get("endpoint_type") == endpoint_type]
+        if typed:
+            candidates = typed
 
     path_matched = [item for item in candidates if path_contains in _endpoint_path(item)]
     if path_matched:
@@ -175,22 +179,39 @@ def load_api_hints() -> dict[str, Any]:
 
     report = json.loads(report_path.read_text(encoding="utf-8"))
     init = _select_endpoint(report, endpoint_type="init", path_contains=INIT_PATH)
-    history = _select_endpoint(report, endpoint_type="history", path_contains=HISTORY_PATH)
+    clearance = _select_endpoint(report, endpoint_type=None, path_contains=CLEARANCE_PATH)
+    filtered = _select_endpoint(
+        report,
+        endpoint_type="history",
+        path_contains=FILTERED_TRANSACTIONS_PATH,
+    )
+    if filtered is None:
+        filtered = _select_endpoint(
+            report,
+            endpoint_type=None,
+            path_contains=FILTERED_TRANSACTIONS_PATH,
+        )
     dashboard = _select_endpoint(report, endpoint_type="dashboard", path_contains=DASHBOARD_PATH)
     runtime_session = _load_runtime_session()
     runtime_endpoints = runtime_session.get("endpoints", {}) if isinstance(runtime_session, dict) else {}
 
-    if not init or not history:
+    if not init or not filtered:
         raise TemporaryError(
-            "api_report.json does not contain init/history endpoints"
+            "api_report.json does not contain required init/filtered-transactions endpoints"
         )
 
     init_hint = _apply_runtime_endpoint_data(
         _extract_endpoint_hint(init),
         runtime_endpoints.get("init") if isinstance(runtime_endpoints, dict) else None,
     )
-    history_hint = _apply_runtime_endpoint_data(
-        _extract_endpoint_hint(history),
+    clearance_hint = None
+    if clearance:
+        clearance_hint = _apply_runtime_endpoint_data(
+            _extract_endpoint_hint(clearance),
+            runtime_endpoints.get("clearance") if isinstance(runtime_endpoints, dict) else None,
+        )
+    filtered_hint = _apply_runtime_endpoint_data(
+        _extract_endpoint_hint(filtered),
         runtime_endpoints.get("history") if isinstance(runtime_endpoints, dict) else None,
     )
     dashboard_hint = None
@@ -203,10 +224,12 @@ def load_api_hints() -> dict[str, Any]:
     hints = {
         "base_url": report.get("base_url", discover_api.DEFAULT_BASE_URL),
         "init": init_hint,
-        "history": history_hint,
+        "clearance": clearance_hint,
+        "filtered_transactions": filtered_hint,
+        "history": filtered_hint,
         "dashboard": dashboard_hint,
         "cards": init_hint,
-        "transactions": history_hint,
+        "transactions": filtered_hint,
         "storage_state_path": str(discover_api.STORAGE_STATE_PATH),
         "runtime_session_path": str(discover_api.RUNTIME_SESSION_PATH),
         "report_generated_at": report.get("generated_at"),
@@ -454,6 +477,23 @@ def _format_date_like_sample(sample_value: Any, date_value: str) -> str:
     return date_value
 
 
+def _to_utc_iso_z(value: datetime) -> str:
+    return value.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+
+
+def _history_day_window_utc(from_date: str, to_date: str) -> tuple[str, str]:
+    try:
+        from_day = date_cls.fromisoformat(from_date)
+        to_day = date_cls.fromisoformat(to_date)
+    except ValueError:
+        return from_date, to_date
+
+    local_tz = datetime.now().astimezone().tzinfo or timezone.utc
+    start_local = datetime.combine(from_day, time(0, 0, 0, 0), tzinfo=local_tz)
+    end_local = datetime.combine(to_day, time(23, 59, 59, 999000), tzinfo=local_tz)
+    return _to_utc_iso_z(start_local), _to_utc_iso_z(end_local)
+
+
 def _normalized_date_field_names(endpoint: dict[str, Any]) -> set[str]:
     names = endpoint.get("date_fields") or endpoint.get("date_params") or []
     return {_normalize_key(_leaf_key(str(name))) for name in names if str(name).strip()}
@@ -564,6 +604,49 @@ def _apply_init_context_to_history_body(body: Any, init_context: dict[str, Any] 
     return updated
 
 
+def _is_filtered_transactions_endpoint(endpoint: dict[str, Any]) -> bool:
+    return FILTERED_TRANSACTIONS_PATH in _endpoint_path(endpoint)
+
+
+def _apply_filtered_history_profile(
+    body: Any,
+    *,
+    endpoint: dict[str, Any],
+    init_context: dict[str, Any] | None,
+    from_date: str,
+    to_date: str,
+) -> Any:
+    if not isinstance(body, dict) or not _is_filtered_transactions_endpoint(endpoint):
+        return body
+
+    updated = copy.deepcopy(body)
+    from_utc, to_utc = _history_day_window_utc(from_date, to_date)
+
+    updated["fromTransDate"] = from_utc
+    updated["toTransDate"] = to_utc
+    updated["merchantHebName"] = ""
+    updated["merchantHebCity"] = ""
+    updated["trnType"] = 0
+    updated["fromTrnAmt"] = 0
+    updated["toTrnAmt"] = 0
+    updated["transactionsOrigin"] = 0
+    updated["transCardPresentInd"] = 0
+    updated["caller"] = "module_search"
+    # UI search-pattern request does not include walletTranInd.
+    updated.pop("walletTranInd", None)
+
+    if isinstance(init_context, dict):
+        bank_account_unique_id = init_context.get("bank_account_unique_id")
+        if bank_account_unique_id:
+            updated["bankAccountUniqueID"] = str(bank_account_unique_id)
+
+        card_ids = [str(item) for item in (init_context.get("card_unique_ids") or []) if str(item).strip()]
+        if card_ids:
+            updated["cards"] = [{"cardUniqueID": card_id} for card_id in card_ids]
+
+    return updated
+
+
 def build_history_request_body(
     endpoint: dict[str, Any],
     *,
@@ -582,7 +665,14 @@ def build_history_request_body(
         from_date=from_date,
         to_date=to_date,
     )
-    return _apply_init_context_to_history_body(body, init_context)
+    body = _apply_init_context_to_history_body(body, init_context)
+    return _apply_filtered_history_profile(
+        body,
+        endpoint=endpoint,
+        init_context=init_context,
+        from_date=from_date,
+        to_date=to_date,
+    )
 
 
 def build_history_query_params(
@@ -818,15 +908,14 @@ def fetch_cards(session: requests.Session, api_hints: dict[str, Any]) -> dict | 
     return payload
 
 
-def fetch_transactions(
+def _fetch_history_endpoint_transactions(
     session: requests.Session,
-    api_hints: dict[str, Any],
+    endpoint: dict[str, Any],
     card_id: str | None,
     from_date: str,
     to_date: str,
     init_payload: Any | None = None,
 ) -> list[dict[str, Any]]:
-    endpoint = api_hints["history"]
     page_key, offset_key, limit_key = _pick_pagination_keys(endpoint)
     init_context = extract_init_context(init_payload)
     if card_id and card_id in set(init_context.get("card_unique_ids", [])):
@@ -874,3 +963,63 @@ def fetch_transactions(
             break
 
     return all_items
+
+
+def fetch_clearance_requests(
+    session: requests.Session,
+    api_hints: dict[str, Any],
+    card_id: str | None,
+    from_date: str,
+    to_date: str,
+    init_payload: Any | None = None,
+) -> list[dict[str, Any]]:
+    endpoint = api_hints.get("clearance")
+    if not isinstance(endpoint, dict):
+        return []
+    return _fetch_history_endpoint_transactions(
+        session,
+        endpoint,
+        card_id=card_id,
+        from_date=from_date,
+        to_date=to_date,
+        init_payload=init_payload,
+    )
+
+
+def fetch_filtered_transactions(
+    session: requests.Session,
+    api_hints: dict[str, Any],
+    card_id: str | None,
+    from_date: str,
+    to_date: str,
+    init_payload: Any | None = None,
+) -> list[dict[str, Any]]:
+    endpoint = api_hints.get("filtered_transactions") or api_hints.get("history")
+    if not isinstance(endpoint, dict):
+        raise TemporaryError("Filtered-transactions endpoint is missing in api_hints")
+    return _fetch_history_endpoint_transactions(
+        session,
+        endpoint,
+        card_id=card_id,
+        from_date=from_date,
+        to_date=to_date,
+        init_payload=init_payload,
+    )
+
+
+def fetch_transactions(
+    session: requests.Session,
+    api_hints: dict[str, Any],
+    card_id: str | None,
+    from_date: str,
+    to_date: str,
+    init_payload: Any | None = None,
+) -> list[dict[str, Any]]:
+    return fetch_filtered_transactions(
+        session,
+        api_hints,
+        card_id=card_id,
+        from_date=from_date,
+        to_date=to_date,
+        init_payload=init_payload,
+    )

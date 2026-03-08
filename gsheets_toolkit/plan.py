@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from gsheets_toolkit.utils import parse_columns_span
 
@@ -8,7 +9,7 @@ from gsheets_toolkit.utils import parse_columns_span
 @dataclass(slots=True)
 class RowUpdate:
     row_index: int
-    values: list[str]
+    values: list[Any]
 
 
 def group_row_updates(
@@ -50,4 +51,3 @@ def group_row_updates(
         }
     )
     return blocks
-

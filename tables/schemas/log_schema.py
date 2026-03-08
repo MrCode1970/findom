@@ -37,3 +37,14 @@ LOG_SPREADSHEET_SCHEMA = SpreadsheetSchema(
     version=1,
 )
 
+
+VALUE_UPDATES = [
+    {
+        "range": f"{META_SHEET.title}!A2:B4",
+        "values": [
+            ["last_sync_at", ""],
+            ["row_count", "0"],
+            ["schema_version", str(LOG_SPREADSHEET_SCHEMA.version)],
+        ],
+    }
+]

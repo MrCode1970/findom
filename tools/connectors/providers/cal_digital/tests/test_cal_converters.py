@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from tools.connectors.providers.cal_digital.converters import convert
+from tools.connectors.providers.cal_digital.converters import convert, convert_with_diagnostics
 
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
@@ -83,3 +83,10 @@ def test_cal_fields_are_mapped_for_refund_transaction() -> None:
     assert movement.external_id == "cal:1809016822025293:30347390426"
     assert str(movement.amount) == "8.00"
     assert movement.occurred_at.isoformat() == "2026-02-02T00:00:00+00:00"
+
+
+def test_converter_diagnostics_include_counts() -> None:
+    result, diag = convert_with_diagnostics(_build_raw_bundle())
+    assert diag["raw_transactions_total"] >= len(result.movements)
+    assert diag["converted_movements"] == len(result.movements)
+    assert "skipped_in_converter" in diag

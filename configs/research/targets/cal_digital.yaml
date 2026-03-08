@@ -1,0 +1,35 @@
+{
+  "provider_name": "cal_digital",
+  "start_url": "https://digital-web.cal-online.co.il/",
+  "env": {
+    "required": [
+      "CAL_USERNAME",
+      "CAL_PASSWORD"
+    ]
+  },
+  "ui": {
+    "important_sections": [
+      "account_overview",
+      "transactions"
+    ],
+    "post_login_wait_seconds": 10
+  },
+  "reports": {
+    "expected_formats": ["csv", "xlsx"]
+  },
+  "endpoint_hints": {
+    "candidates": [
+      "/transactions/api/filteredtransactions/getfilteredtransactions",
+      "/transactions/api/lasttransactionsfordashboard",
+      "/account/init"
+    ],
+    "notes": "Existing high-fidelity CAL explorer already available."
+  },
+  "artifacts": {
+    "root": ".state/cal_digital/api_discovery"
+  },
+  "compatibility": {
+    "mode": "legacy_cal_explorer",
+    "legacy_command": "python tools/cal_explorer.py --profile-dir .state/cal_digital/pw_profile --headful --keep-open --log-dir .state/cal_digital/api_discovery"
+  }
+}

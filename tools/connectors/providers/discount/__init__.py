@@ -1,0 +1,1 @@
+"""Discount connector provider."""

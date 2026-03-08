@@ -1,0 +1,59 @@
+{
+  "provider_name": "discount",
+  "start_url": "https://start.telebank.co.il/login/#/LOGIN_PAGE",
+  "start_urls": [
+    "https://start.telebank.co.il/login/#/LOGIN_PAGE",
+    "https://www.discountbank.co.il/",
+    "https://discountbank.co.il/",
+    "https://online.discountbank.co.il/"
+  ],
+  "env": {
+    "required": [
+      "DISCOUNT_USERNAME",
+      "DISCOUNT_PASSWORD",
+      "DISCOUNT_CODE"
+    ]
+  },
+  "ui": {
+    "important_sections": [
+      "account_overview",
+      "transactions",
+      "statements"
+    ],
+    "post_login_wait_seconds": 15,
+    "login": {
+      "fields": [
+        {
+          "env": "DISCOUNT_USERNAME",
+          "selector": "input#tzId:visible, input[name=\"tzId\"]:visible, input[name=\"username\"]:visible, input#username:visible, input[name=\"userId\"]:visible, input[name=\"userid\"]:visible, input[name=\"identity\"]:visible, input[name=\"idNumber\"]:visible, input[name=\"tz\"]:visible, input[placeholder*=\"מספר זהות\"]:visible, input[aria-label*=\"מספר זהות\"]:visible"
+        },
+        {
+          "env": "DISCOUNT_PASSWORD",
+          "selector": "input#tzPassword:visible, input[name=\"tzPassword\"]:visible, input[type=\"password\"]:visible, input#password:visible, input[name=\"password\"]:visible, input[placeholder*=\"סיסמה\"]:visible, input[aria-label*=\"סיסמה\"]:visible"
+        },
+        {
+          "env": "DISCOUNT_CODE",
+          "selector": "input#aidnum:visible, input[name=\"aidnum\"]:visible, input[name=\"code\"]:visible, input#code:visible, input[name=\"otp\"]:visible, input[name=\"identifier\"]:visible, input[name=\"idCode\"]:visible, input[placeholder*=\"קוד מזהה\"]:visible, input[aria-label*=\"קוד מזהה\"]:visible"
+        }
+      ],
+      "submit_selector": "button[type=\"submit\"], button:has-text(\"Login\"), button:has-text(\"כניסה\")"
+    }
+  },
+  "reports": {
+    "expected_formats": ["csv", "xlsx", "pdf"],
+    "download_capture": {
+      "enabled": true,
+      "default_report_type": "statement",
+      "default_account": "discount_default",
+      "default_period": "manual"
+    }
+  },
+  "endpoint_hints": {
+    "candidates": ["transactions", "statements", "account/init"],
+    "notes": "Start with transaction history pages and statement export actions."
+  },
+  "artifacts": {
+    "root": ".state/discount/research"
+  },
+  "compatibility": {}
+}

@@ -1760,7 +1760,62 @@ def _submit_with_enter_on_password(page: Any) -> bool:
     return False
 
 
-def _login(page: Any, username: str, password: str, logger: logging.Logger) -> None:
+def _has_quick_login_challenge(page: Any) -> bool:
+    markers = (
+        "4 ספרות אחרונות",
+        "SMS",
+        "WhatsApp",
+        "שלח לי סיסמה",
+    )
+    for target in _targets(page):
+        for marker in markers:
+            try:
+                locator = target.locator(f"text={marker}")
+                if locator.count() > 0:
+                    return True
+            except Exception:
+                continue
+    return False
+
+
+def _fill_secondary_challenge_input(page: Any, value: str) -> bool:
+    selectors = (
+        "input[inputmode='numeric']",
+        "input[autocomplete='one-time-code']",
+        "input[id*='mat-input-1']",
+        "input[name*='otp']",
+        "input[name*='code']",
+    )
+    for target in _targets(page):
+        if _try_fill_first(target, selectors, value):
+            return True
+        if _fill_via_js_fallback(target, value, is_password=True):
+            return True
+    return False
+
+
+def _wait_for_manual_login(page: Any, logger: logging.Logger) -> None:
+    timeout_sec = int(os.getenv("CAL_MANUAL_LOGIN_TIMEOUT_SEC", "180"))
+    logger.warning(
+        "Auto-login cannot complete this CAL screen. Waiting up to %ss for manual completion in browser.",
+        timeout_sec,
+    )
+
+    deadline = datetime.now(timezone.utc) + timedelta(seconds=max(30, timeout_sec))
+    while datetime.now(timezone.utc) < deadline:
+        if page.is_closed():
+            raise RuntimeError("Browser page was closed before manual login completed")
+        if not _has_quick_login_challenge(page):
+            logger.info("Manual login challenge no longer visible, continuing discovery flow")
+            return
+        page.wait_for_timeout(2000)
+
+    raise RuntimeError(
+        "Manual login timeout reached while waiting for OTP/quick-login completion."
+    )
+
+
+def _login(page: Any, username: str, password: str, logger: logging.Logger, *, interactive: bool) -> None:
     switched = _switch_to_username_login(page)
     if switched:
         logger.info("Switched login form to username/password mode")
@@ -1771,12 +1826,25 @@ def _login(page: Any, username: str, password: str, logger: logging.Logger) -> N
     filled_pass = False
     for _ in range(3):
         filled_user, filled_pass = _prefill_credentials(page, username, password)
+        if filled_user and not filled_pass and _has_quick_login_challenge(page):
+            filled_pass = _fill_secondary_challenge_input(page, password)
         if filled_user and filled_pass:
             break
         page.wait_for_timeout(900)
 
     if not filled_user or not filled_pass:
+        challenge_mode = _has_quick_login_challenge(page)
+        if challenge_mode and interactive:
+            _wait_for_manual_login(page, logger)
+            return
+
         input_hints = _collect_input_hints(page)
+        if challenge_mode and not interactive:
+            raise RuntimeError(
+                "Detected OTP/quick-login challenge flow, but discovery is running headless. "
+                "Run with CAL_DEBUG=1 and complete login manually in browser window. "
+                f"Visible inputs sample: {input_hints}"
+            )
         raise RuntimeError(
             "Could not fill login form fields (username/password). "
             f"Visible inputs sample: {input_hints}"
@@ -2184,7 +2252,7 @@ def run_discovery(base_url: str, debug: bool) -> int:
             _close_page_if_disallowed(page, logger)
 
             diagnostics["steps"].append("login")
-            _login(page, username, password, logger)
+            _login(page, username, password, logger, interactive=bool(debug))
             login_status = "submitted"
 
             diagnostics["steps"].append("ensure_authenticated")

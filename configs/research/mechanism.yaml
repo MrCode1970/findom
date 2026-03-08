@@ -1,0 +1,39 @@
+{
+  "browser": {
+    "headless": false,
+    "persistent_profile": true
+  },
+  "capture": {
+    "include_response_body": true,
+    "inline_body_max_chars": 200000
+  },
+  "redaction": {
+    "header_markers": [
+      "authorization",
+      "cookie",
+      "set-cookie",
+      "token",
+      "secret",
+      "password",
+      "csrf"
+    ],
+    "body_markers": [
+      "authorization",
+      "cookie",
+      "token",
+      "password",
+      "secret",
+      "csrf"
+    ]
+  },
+  "artifacts": {
+    "run_log_name": "run.log",
+    "requests_log_name": "network_requests.jsonl",
+    "responses_log_name": "network_responses.jsonl",
+    "reports_manifest_name": "reports_manifest.json"
+  },
+  "logging": {
+    "level": "INFO",
+    "summary_format": "json"
+  }
+}

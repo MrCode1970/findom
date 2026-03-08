@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import sys
+from decimal import Decimal, InvalidOperation
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,29 @@ def _as_str(value: Any) -> str:
     return str(value)
 
 
+def _as_number(value: Any, *, field_name: str, external_id: str) -> float:
+    if value is None:
+        raise RuntimeError(f"Movement item '{external_id}' has empty {field_name}")
+    if isinstance(value, bool):
+        raise RuntimeError(f"Movement item '{external_id}' has invalid {field_name}: {value}")
+    if isinstance(value, (int, float, Decimal)):
+        return float(value)
+
+    text = str(value).strip()
+    if text.startswith("'"):
+        text = text[1:].strip()
+    if not text:
+        raise RuntimeError(f"Movement item '{external_id}' has empty {field_name}")
+
+    normalized_text = text.replace(" ", "").replace(",", ".")
+    try:
+        return float(Decimal(normalized_text))
+    except (InvalidOperation, ValueError) as exc:
+        raise RuntimeError(
+            f"Movement item '{external_id}' has non-numeric {field_name}: {value}"
+        ) from exc
+
+
 def _deduplicate_by_external_id(movements: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     result_reversed: list[dict[str, Any]] = []
@@ -59,8 +83,8 @@ def _deduplicate_by_external_id(movements: list[dict[str, Any]]) -> list[dict[st
     return list(reversed(result_reversed))
 
 
-def _to_journal_rows(movements: list[dict[str, Any]], synced_at: str) -> tuple[list[list[str]], list[str]]:
-    rows: list[list[str]] = []
+def _to_journal_rows(movements: list[dict[str, Any]], synced_at: str) -> tuple[list[list[Any]], list[str]]:
+    rows: list[list[Any]] = []
     keys: list[str] = []
     for movement in movements:
         external_id = _as_str(movement.get("external_id")).strip()
@@ -68,7 +92,7 @@ def _to_journal_rows(movements: list[dict[str, Any]], synced_at: str) -> tuple[l
             raise RuntimeError("Movement item has empty external_id")
         row = [
             _as_str(movement.get("date")),
-            _as_str(movement.get("amount")),
+            _as_number(movement.get("amount"), field_name="amount", external_id=external_id),
             _as_str(movement.get("currency")),
             _as_str(movement.get("merchant")),
             _as_str(movement.get("comment")),
@@ -121,6 +145,8 @@ def write_log_snapshot(
         start_row=2,
         rows=rows,
         keys=keys,
+        numeric_column_indexes=[1],  # B: amount
+        locale_aware_numeric=True,
     )
     _update_meta(client, synced_at=synced_at_iso, row_count=len(rows))
 
